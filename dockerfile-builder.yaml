@@ -53,8 +53,8 @@ setup:
   # Setup env 
   envvars:
     dependencies:
-      setup: 
-      config: 
+      setup: ""
+      config: ""
     httpd:
       conf:
         path: /usr/local/apache2/conf
