@@ -1,0 +1,80 @@
+#!/bin/sh
+
+#
+# Local test script to build and test docker image
+#
+
+# exit if a command fails
+set -e
+
+CURL=$(which curl)
+DOCKER=$(which docker)
+
+if [ CURL = '' ]; then
+    echo 'The package curl is required\n'
+    exit 1
+fi
+
+if [ DOCKER = '' ]; then
+    echo 'Docker is required\n'
+    exit 1
+fi
+
+echo "#\n# Building image\n#\n"
+docker build \
+    --no-cache \
+    -t 03192859189254/apache-alpine:latest-dev \
+    --build-arg BUILD_COMMIT=`git rev-parse --short HEAD` \
+    --build-arg BUILD_DATE=`date -u +"%Y-%m-%dT%H:%M:%SZ"` \
+    .
+
+echo "#\n# Cleaning docker\n#\n"
+running_containers=$(docker ps -aq)
+if [ "$running_containers" ] 
+    then
+        docker stop $running_containers -t 0 && docker system prune -f
+fi
+
+echo "#\n# Running test\n#\n"
+# Starting apache container
+CURDIR=$(pwd)
+TEST_APACHE_CONTAINER_ID=$( docker run -d --name=apache-alpine -e CONFIG_APACHE_DOCUMENT_ROOT=/var/www/html -e CONFIG_PHP_FPM_HOST=127.0.0.1 -v $CURDIR/volumes/test_webroot:/var/www/html -p 38080:80 03192859189254/apache-alpine:latest-dev )
+TEST_APACHE_CONTAINER_STATUS=$(sleep 1 && docker inspect -f '{{.State.Running}}' $TEST_APACHE_CONTAINER_ID)
+
+# Testing apache container
+if [ ! "$TEST_APACHE_CONTAINER_STATUS" = "true" ]; then
+    echo "Httpd container failed, print logs and exiting\n";
+    docker logs $TEST_APACHE_CONTAINER_ID;
+    exit 1;
+fi
+# Running PHP-FPM container
+if [ "True" = "True" ]; then
+    TEST_PHP_CONTAINER_ID=$( docker run -d --net=container:apache-alpine -v $CURDIR/volumes/test_webroot:/var/www/html quay.io/alphasocket/docker-magento-php-fpm-alpine:7.0 );
+    TEST_PHP_CONTAINER_STATUS=$(sleep 1 && docker inspect -f '{{.State.Running}}' $TEST_PHP_CONTAINER_ID);
+fi
+# Testing PHP-FPM container
+if [ ! "$TEST_PHP_CONTAINER_STATUS" = "true" ]; then
+    echo "PHP-FPM container failed, print logs and exiting\n";
+    docker logs $TEST_PHP_CONTAINER_ID;
+    exit 1;
+fi
+# Testing apache
+HTTP_CODE=$( sleep 1 && curl -sLI 127.0.0.1:38080/index.html -o /dev/null -w '%{http_code}\n' )
+
+# Checking exit code
+if [ ! "$HTTP_CODE" = "200" ]; then
+    echo "### Test failed, received HTTP code ${HTTP_CODE} printing log\n";
+    docker logs $TEST_APACHE_CONTAINER_ID;
+    exit 1;
+fi
+# Testing PHP service
+if [ "True" = "True" ]; then
+    HTTP_CONTENT=$( sleep 1 && curl 127.0.0.1:38080/index.php );
+fi
+# Print success
+if [ echo "$HTTP_CONTENT" | grep -q "http://www.php.net/" ]; then
+    echo "### Test succeeded\n";
+fi
+
+
+exit 0
