@@ -1,7 +1,7 @@
 project:
   title: &project_title Alphasocket/dockerized-apache-alpine
   codename: &project_codename apache-alpine
-  description: Dockerized httpd service on alpine distro
+  description: Dockerized apache service *installed* on alpine distro
 
 #
 # Init builder
@@ -33,17 +33,16 @@ build:
       valueFromCommand: 'echo $BUILD_BRANCH | cut -d \- -f 1'
     env:
       valueFromCommand: 'env=$(echo $BUILD_BRANCH | cut -d \- -f 2); [ "$env" = "$BUILD_VERSION" ] && echo $GENERAL_KEYS_PRD || echo $env'
-    httpd:
+    apache:
       port:
         dev: 80
         prd: 443
     dockerfile:
-      image: 'httpd:alpine'
+      image: 'alpine:latest'
       ports:
         main: 
-          valueFromCommand: '[ "$BUILD_ENV" = "$GENERAL_KEYS_DEV" ] && echo "$BUILD_HTTPD_PORT_DEV" || echo "$BUILD_HTTPD_PORT_PRD"'
-      # cmd: /usr/sbin/httpd -D FOREGROUND -f /etc/apache2/httpd.conf
-      cmd: httpd-foreground
+          valueFromCommand: '[ "$BUILD_ENV" = "$GENERAL_KEYS_DEV" ] && echo "$BUILD_APACHE_PORT_DEV" || echo "$BUILD_APACHE_PORT_PRD"'
+      cmd: /usr/sbin/apache2 -D FOREGROUND -f /etc/apache2/apache.conf
 
 
 #
@@ -53,15 +52,14 @@ setup:
   # Setup env 
   envvars:
     dependencies:
-      setup: ""
+      setup: "apache2 apache2-utils"
       config: ""
-    httpd:
+    apache:
       conf:
-        path: /usr/local/apache2/conf
-        #path: /etc/apache2/
-        main: ${SETUP_HTTPD_CONF_PATH}/httpd.conf
-        confd: ${SETUP_HTTPD_CONF_PATH}/conf.d
-        vhostd: ${SETUP_HTTPD_CONF_PATH}/vhost.d
+        path: /etc/apache2/
+        main: ${SETUP_APACHE_CONF_PATH}/apache.conf
+        confd: ${SETUP_APACHE_CONF_PATH}/conf.d
+        vhostd: ${SETUP_APACHE_CONF_PATH}/vhost.d
     php:
       fpm: True
   # Setup Processes
@@ -74,32 +72,32 @@ setup:
     - title: "Enable required modules"
       commands:
         # Enable rewrite_module
-        - sed -i '/LoadModule.*rewrite_module/ s/^#//' $SETUP_HTTPD_CONF_MAIN
+        - sed -i '/LoadModule.*rewrite_module/ s/^#//' $SETUP_APACHE_CONF_MAIN
         # Enable logio_module
-        - sed -i '/LoadModule.*logio_module/ s/^#//' $SETUP_HTTPD_CONF_MAIN
+        - sed -i '/LoadModule.*logio_module/ s/^#//' $SETUP_APACHE_CONF_MAIN
 
     - title: "Setup optional conf folders"
       commands:
         # Add conf.d folder
-        - mkdir $SETUP_HTTPD_CONF_CONFD
-        - echo -ne "\nIncludeOptional $SETUP_HTTPD_CONF_CONFD/*.conf\n" >> $SETUP_HTTPD_CONF_MAIN
+        - mkdir $SETUP_APACHE_CONF_CONFD
+        - echo -ne "\nIncludeOptional $SETUP_APACHE_CONF_CONFD/*.conf\n" >> $SETUP_APACHE_CONF_MAIN
         # Add vhost.d folder
-        - mkdir $SETUP_HTTPD_CONF_VHOSTD
-        - echo -ne "\nIncludeOptional $SETUP_HTTPD_CONF_VHOSTD/*.conf\n" >> $SETUP_HTTPD_CONF_MAIN
+        - mkdir $SETUP_APACHE_CONF_VHOSTD
+        - echo -ne "\nIncludeOptional $SETUP_APACHE_CONF_VHOSTD/*.conf\n" >> $SETUP_APACHE_CONF_MAIN
 
     - title: "Enable Production required modules"
       shell_condition: '"$BUILD_ENV" = "$GENERAL_KEYS_PRD"'
       commands:
         # Enable ssl_module
-        - sed -i '/LoadModule.*ssl_module/ s/^#//' $SETUP_HTTPD_CONF_MAIN
+        - sed -i '/LoadModule.*ssl_module/ s/^#//' $SETUP_APACHE_CONF_MAIN
 
     - title: "Enable PHP FPM required modules"
       shell_condition: '"$SETUP_PHP_FPM" = "$GENERAL_KEYS_TRUE"'
       commands:
         # Enable proxy_module
-        - sed -i '/LoadModule.*proxy_module/ s/^#//' $SETUP_HTTPD_CONF_MAIN
+        - sed -i '/LoadModule.*proxy_module/ s/^#//' $SETUP_APACHE_CONF_MAIN
         # Enable proxy_fcgi_module
-        - sed -i '/LoadModule.*proxy_fcgi_module/ s/^#//' $SETUP_HTTPD_CONF_MAIN
+        - sed -i '/LoadModule.*proxy_fcgi_module/ s/^#//' $SETUP_APACHE_CONF_MAIN
 
 #
 # Config process run just before the entrypoint
@@ -107,7 +105,7 @@ setup:
 config:
   # Config env 
   envvars:
-    httpd:
+    apache:
       servername: $BUILD_NAME
       alias: $BUILD_NAME
       timeout: 1000
@@ -125,7 +123,7 @@ config:
         port: 9000
     paths:
       templates:
-        httpd:
+        apache:
           server: /usr/local/templates/10-server.conf
           ssl: /usr/local/templates/10-ssl.conf
           fastcgi: /usr/local/templates/20-fastcgi.conf
@@ -133,51 +131,51 @@ config:
             dev: /usr/local/templates/dev_vhost.conf
             prd: /usr/local/templates/prd_vhost.conf
       conf:
-        httpd:
-          server: ${SETUP_HTTPD_CONF_CONFD}/10-server.conf
-          ssl: ${SETUP_HTTPD_CONF_CONFD}/10-ssl.conf
-          fastcgi: ${SETUP_HTTPD_CONF_CONFD}/20-fastcgi.conf
-          vhost: ${SETUP_HTTPD_CONF_VHOSTD}/main.conf
+        apache:
+          server: ${SETUP_APACHE_CONF_CONFD}/10-server.conf
+          ssl: ${SETUP_APACHE_CONF_CONFD}/10-ssl.conf
+          fastcgi: ${SETUP_APACHE_CONF_CONFD}/20-fastcgi.conf
+          vhost: ${SETUP_APACHE_CONF_VHOSTD}/main.conf
           
   processes:
     - title: "Make sure webroot exists"
       commands:
-        - "mkdir -p ${CONFIG_HTTPD_DOCUMENT_ROOT}"
+        - "mkdir -p ${CONFIG_APACHE_DOCUMENT_ROOT}"
 
     - title: "Create server conf"
       commands:
-       - cp $CONFIG_PATHS_TEMPLATES_HTTPD_SERVER $CONFIG_PATHS_CONF_HTTPD_SERVER
+       - cp $CONFIG_PATHS_TEMPLATES_APACHE_SERVER $CONFIG_PATHS_CONF_APACHE_SERVER
 
     - title: "Create Production configurations"
       shell_condition: '"$BUILD_ENV" = "$GENERAL_KEYS_PRD"'
       commands:
         # Enable ssl_module
-       - cp $CONFIG_PATHS_TEMPLATES_HTTPD_SSL $CONFIG_PATHS_CONF_HTTPD_SSL
+       - cp $CONFIG_PATHS_TEMPLATES_APACHE_SSL $CONFIG_PATHS_CONF_APACHE_SSL
 
     - title: "Create fastcgi conf"
       shell_condition: '"$SETUP_PHP_FPM" = "$GENERAL_KEYS_TRUE"'
       commands:
-       #- while read line; do eval echo \"$line\"; done < $HTTPD_FAST_CGI_CONF_TEMPLATE_PATH >> $HTTPD_FAST_CGI_CONF_PATH
+       #- while read line; do eval echo \"$line\"; done < $APACHE_FAST_CGI_CONF_TEMPLATE_PATH >> $APACHE_FAST_CGI_CONF_PATH
 
-       #- sed -i -e 's/<PHP_FPM_HOST>/'$CONFIG_PHP_FPM_HOST'/g' $HTTPD_FAST_CGI_CONF_PATH
-       #- sed -i -e 's/<PHP_FPM_PORT>/'$CONFIG_PHP_FPM_PORT'/g' $HTTPD_FAST_CGI_CONF_PATH
-       #- sed -i -e 's/<PHP_PROXY_REGEX>/'${CONFIG_PHP_PROXY_REGEX}'/g' $HTTPD_FAST_CGI_CONF_PATH
-       #- sed -i -e 's/<PHP_PROXY_TIMEOUT>/'${CONFIG_PHP_PROXY_TIMEOUT}'/g' $HTTPD_FAST_CGI_CONF_PATH
-       - cp $CONFIG_PATHS_TEMPLATES_HTTPD_FASTCGI $CONFIG_PATHS_CONF_HTTPD_FASTCGI
+       #- sed -i -e 's/<PHP_FPM_HOST>/'$CONFIG_PHP_FPM_HOST'/g' $APACHE_FAST_CGI_CONF_PATH
+       #- sed -i -e 's/<PHP_FPM_PORT>/'$CONFIG_PHP_FPM_PORT'/g' $APACHE_FAST_CGI_CONF_PATH
+       #- sed -i -e 's/<PHP_PROXY_REGEX>/'${CONFIG_PHP_PROXY_REGEX}'/g' $APACHE_FAST_CGI_CONF_PATH
+       #- sed -i -e 's/<PHP_PROXY_TIMEOUT>/'${CONFIG_PHP_PROXY_TIMEOUT}'/g' $APACHE_FAST_CGI_CONF_PATH
+       - cp $CONFIG_PATHS_TEMPLATES_APACHE_FASTCGI $CONFIG_PATHS_CONF_APACHE_FASTCGI
 
     - title: "Set vhost template"
       commands:
-        - VHOST_TEMPLATE=$CONFIG_PATHS_TEMPLATES_HTTPD_VHOST_PRD
+        - VHOST_TEMPLATE=$CONFIG_PATHS_TEMPLATES_APACHE_VHOST_PRD
     
     - title: "Override vhost template if dev"
       shell_condition: '"$BUILD_ENV" = "$GENERAL_KEYS_DEV"'
       commands:
-        - VHOST_TEMPLATE=$CONFIG_PATHS_TEMPLATES_HTTPD_VHOST_DEV
+        - VHOST_TEMPLATE=$CONFIG_PATHS_TEMPLATES_APACHE_VHOST_DEV
 
     - title: "Create vhost conf"
       commands:
         # Create vhost
-        - cp $VHOST_TEMPLATE $CONFIG_PATHS_CONF_HTTPD_VHOST
+        - cp $VHOST_TEMPLATE $CONFIG_PATHS_CONF_APACHE_VHOST
     
 test:
   envvars:
@@ -185,7 +183,7 @@ test:
     port: 38080
     dockerfile:
       volumes:
-        webroot: volumes/test_webroot:$CONFIG_HTTPD_DOCUMENT_ROOT
+        webroot: volumes/test_webroot:$CONFIG_APACHE_DOCUMENT_ROOT
       tag: 
         user: *general_docker_user
         name: $BUILD_NAME
@@ -193,27 +191,27 @@ test:
   processes:
 
     # 
-    # Run httpd
+    # Run apache
     # 
-    - title: "Starting httpd container"
+    - title: "Starting apache container"
       commands: 
         - CURDIR=$(pwd)
-        - TEST_HTTPD_CONTAINER_ID=$(
+        - TEST_APACHE_CONTAINER_ID=$(
             docker run 
               -d --name=$TEST_NAME
-              -e CONFIG_HTTPD_DOCUMENT_ROOT=${CONFIG_HTTPD_DOCUMENT_ROOT}
+              -e CONFIG_APACHE_DOCUMENT_ROOT=${CONFIG_APACHE_DOCUMENT_ROOT}
               -e CONFIG_PHP_FPM_HOST=127.0.0.1
               -v $CURDIR/$TEST_DOCKERFILE_VOLUMES_WEBROOT
               -p ${TEST_PORT}:${BUILD_DOCKERFILE_PORTS_MAIN}
               ${TEST_DOCKERFILE_TAG_USER}/${TEST_DOCKERFILE_TAG_NAME}:${TEST_DOCKERFILE_TAG_VERSION} 
           )
-        - TEST_HTTPD_CONTAINER_STATUS=$(sleep 1 && docker inspect -f '{{.State.Running}}' $TEST_HTTPD_CONTAINER_ID)
+        - TEST_APACHE_CONTAINER_STATUS=$(sleep 1 && docker inspect -f '{{.State.Running}}' $TEST_APACHE_CONTAINER_ID)
 
-    - title: "Testing httpd container"
-      shell_condition: '! "$TEST_HTTPD_CONTAINER_STATUS" = "true"'
+    - title: "Testing apache container"
+      shell_condition: '! "$TEST_APACHE_CONTAINER_STATUS" = "true"'
       commands:
         - echo "Httpd container failed, print logs and exiting\n"
-        - docker logs $TEST_HTTPD_CONTAINER_ID
+        - docker logs $TEST_APACHE_CONTAINER_ID
         - exit 1
         
     # 
@@ -242,7 +240,7 @@ test:
     #
     # TESTING
     #
-    - title: "Testing httpd"
+    - title: "Testing apache"
       commands:
         - HTTP_CODE=$( sleep 1 && curl -sLI 127.0.0.1:${TEST_PORT}/index.html -o /dev/null -w '%{http_code}\n' )
 
