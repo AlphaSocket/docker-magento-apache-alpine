@@ -16,7 +16,6 @@ ENV \
 	GENERAL_KEYS_PRD="prd" \
 	BUILD_NAME="apache-alpine" \
 	BUILD_BRANCH="latest" \
-	BUILD_COMMIT="4d61a70" \
 	BUILD_VERSION="latest" \
 	BUILD_ENV="prd" \
 	BUILD_APACHE_PORT_DEV="80" \
@@ -61,11 +60,11 @@ RUN chmod +rx /usr/local/bin/setup && \
     sync && \
     /usr/local/bin/setup 
 
-EXPOSE 443 
+EXPOSE 443 443
 
 ENTRYPOINT ["/bin/sh", "-c"]
 CMD ["/usr/local/bin/config && /usr/sbin/apache2 -D FOREGROUND -f /etc/apache2/apache.conf"]
 
 LABEL \
-    org.label-schema.vcs-ref=4d61a70 \
+    org.label-schema.vcs-ref=$BUILD_COMMIT \
     org.label-schema.vcs-url="https://github.com/AlphaSocket/dockerized-apache-alpine"

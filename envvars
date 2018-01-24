@@ -9,7 +9,6 @@ GENERAL_KEYS_PRD='prd'
 # Build
 BUILD_NAME='apache-alpine'
 BUILD_BRANCH='latest'
-BUILD_COMMIT='4d61a70'
 BUILD_VERSION='latest'
 BUILD_ENV='prd'
 BUILD_APACHE_PORT_DEV='80'
