@@ -27,8 +27,6 @@ build:
     name: *project_codename
     branch:
       valueFromCommand: 'git rev-parse --abbrev-ref HEAD'
-    commit:
-      valueFromCommand: 'git rev-parse --short HEAD'
     version:
       valueFromCommand: 'echo $BUILD_BRANCH | cut -d \- -f 1'
     env:
